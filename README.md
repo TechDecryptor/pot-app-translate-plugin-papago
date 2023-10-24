@@ -1,4 +1,4 @@
-# Pot-App Papago 翻译插件 (无需配置，直接使用)
+# Pot-App [Papago](https://papago.naver.com/) 翻译插件 (无需配置，直接使用)
 
 ## 支持平台
 
