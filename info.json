@@ -1,5 +1,5 @@
 {
-  "id": "[plugin].com.TechDecryptor.papago",
+  "id": "plugin.com.TechDecryptor.papago",
   "plugin_type": "translate",
   "icon": "icon.png",
   "display": "Papago",
