@@ -1,34 +1,66 @@
-name: Build
-on: push
-permissions: write-all
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
+  release:
+    if: github.event.deleted == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Install zip
-        run: sudo apt-get install -y jq
-      - id: getname
+
+      - name: Validate tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          echo "NAME=$(cat info.json | jq '.id' | tr -d '"')" >> "$GITHUB_ENV"
-          echo "ICON=$(cat info.json | jq '.icon' | tr -d '"')" >> "$GITHUB_ENV"
-      - uses: vimtor/action-zip@v1
-        with:
-          files: info.json ${{ env.ICON }} main.js
-          dest: ${{ env.NAME }}.potext
-      - name: Upload Artifacts
+          if [[ ! "$TAG_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid tag: $TAG_NAME. Expected MAJOR.MINOR.PATCH, for example 1.2.3."
+            exit 1
+          fi
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y jq zip
+
+      - name: Read plugin metadata
+        id: metadata
+        run: |
+          plugin_id="$(jq -er '.id | select(type == "string" and length > 0)' info.json)"
+          icon="$(jq -er '.icon | select(type == "string" and length > 0)' info.json)"
+          test -f "$icon"
+          echo "archive=${plugin_id}.potext" >> "$GITHUB_OUTPUT"
+          echo "icon=$icon" >> "$GITHUB_OUTPUT"
+
+      - name: Build plugin
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+          ICON: ${{ steps.metadata.outputs.icon }}
+        run: zip -9 "$ARCHIVE" info.json "$ICON" main.js
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.NAME }}.potext
-          path: "*.potext"
+          name: ${{ steps.metadata.outputs.archive }}
+          path: ${{ steps.metadata.outputs.archive }}
           if-no-files-found: error
-      - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags')
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: "*.potext"
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: ${{ steps.metadata.outputs.archive }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
